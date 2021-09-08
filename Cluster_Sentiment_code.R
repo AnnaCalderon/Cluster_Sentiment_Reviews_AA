@@ -770,6 +770,7 @@ ggplot(data=data.frame(cluster = 2:10,silhoette_width),aes(x=cluster,y=silhoette
 
 # Visualize clustering in 2 dimensions using factor analysis
 # k_segments 
+# AAdatafa
 k_segments = km$cluster
 table(k_segments)
 
@@ -817,7 +818,7 @@ AAdatafinalclusters = cbind(AAdatafinal, h_segments, k_segments)
 str(AAdatafinalclusters)
 
 
-# Cluster Profiling and Key Characteristics
+# Cluster Profiling 
 # Profile Segments by Needs
 # h_segments 
 AAdatafinalclusters %>%
@@ -835,7 +836,7 @@ AAdatafinalclusters %>%
   ggtitle("Cluster Profiling and Key Characteristics")+
   coord_flip()
 
-# k_segments ****
+# k_segments 1 ****
 AAdatafinalclusters %>%
   select(overall:value_for_money,k_segments)%>%
   group_by(k_segments)%>%
@@ -850,7 +851,34 @@ AAdatafinalclusters %>%
   theme(panel.grid.major = element_line(color = "grey"))+
   scale_fill_manual(values = c("orange2","olivedrab","plum3"),name = "Segments")+
   theme(legend.position = "bottom")+
-  ggtitle("Profile by Needs", subtitle = "K-Means segments" )+
+  ggtitle("Profile by Needs", subtitle = "K-Means segments by individual variable" )+
+  coord_flip()
+
+# k_segments 2 ****
+data_2PA = AAdatafinalclusters %>%
+  select(seat_comfort :value_for_money,k_segments)
+
+data_2PA$PA1_mean <- rowMeans(data_2PA[1:4], na.rm=TRUE)
+data_2PA$PA2_mean <- rowMeans(data_2PA[5:6], na.rm=TRUE)
+
+data_2PA = data_2PA %>%
+  select(PA1_mean,PA2_mean,k_segments)
+
+data_2PA %>%
+  select(PA1_mean,PA2_mean,k_segments)%>%
+  group_by(k_segments)%>%
+  summarize_all(function(x) round(mean(x,na.rm=T),2))%>%
+  gather(key = var,value = value,PA1_mean,PA2_mean)%>%
+  ggplot(aes(x=var,y=value,fill=factor(k_segments)))+
+  geom_col(position='dodge',alpha=8/10)+
+  labs(y="Rating Average",x="Factors")+
+  theme(text = element_text(family = "Helvetica Neue",color = "black"))+
+  theme(plot.background = element_blank())+
+  theme(panel.background = element_blank())+
+  theme(panel.grid.major = element_line(color = "grey"))+
+  scale_fill_manual(values = c("orange2","olivedrab","plum3"),name = "Segments")+
+  theme(legend.position = "bottom")+
+  ggtitle("Profile by Needs", subtitle = "K-Means segments by Factors" )+
   coord_flip()
 
 # Profile Segments by characteristics
