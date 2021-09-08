@@ -221,6 +221,7 @@ data.frame(factor = 1:ncol(AAdatafa), eigen = eigen(cor(AAdatafa))$values)
 fa.parallel(AAdatafa,fa='fa',fm = 'pa')
 # RESULT: Suggests 2
 
+
 # Total Variance Explained
 # Using 2 factors 
 # the total variance explained by factors should be greater than 70%
