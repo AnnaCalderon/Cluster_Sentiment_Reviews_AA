@@ -38,6 +38,8 @@
 
 ## Clusters Profiling
 ### Profile Segments by Needs
+![image](https://user-images.githubusercontent.com/52983514/132471342-92020e74-4d1f-4103-807c-ec5c11dbcb2c.png)
+![image](https://user-images.githubusercontent.com/52983514/132471525-ba8f57cc-57fd-484e-8287-a5f89093947e.png)
 
 ### Profile Segments by Characteristics
 <img width="764" alt="Profiling on Observable Variables" src="https://user-images.githubusercontent.com/52983514/132465349-eafe3f58-dd79-43e7-a43f-015ff70731c9.png">
