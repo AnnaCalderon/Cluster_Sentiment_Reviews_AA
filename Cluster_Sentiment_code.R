@@ -852,7 +852,6 @@ AAdatafinalclusters %>%
   ggtitle("Profile by Needs", subtitle = "K-Means segments" )+
   coord_flip()
 
-
 # Profile Segments by characteristics
 # Proportions by clusters
 # Reason for travel 
