@@ -854,7 +854,6 @@ AAdatafinalclusters %>%
 
 
 # Profile Segments by characteristics
-
 # Proportions by clusters
 # Reason for travel 
 round(prop.table(table(AAdatafinalclusters$h_segments,AAdatafinalclusters[,9]),1), digits = 2)
