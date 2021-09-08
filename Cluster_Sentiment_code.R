@@ -4,6 +4,7 @@
 # Date: 04/15/21
 #-------------------------------------------------------------------------------
 
+
 # LOAD LIBRARIES ---------------------------------------------------------------
 library(lattice) 
 library(ggplot2) 
@@ -24,19 +25,13 @@ library(lexicon)
 library(cluster)
 library(mclust)
 library(RColorBrewer)
+library(janeaustenr)
+library(tm)
+
 
 # IMPORT RAW DATASET & DATA EXPLORATION ----------------------------------------
 
-
-#setwd('C:/Users/Carol/OneDrive/Desktop/Columbia Study/2nd Semester/5205 - APAN Framework & Methods II/Group Project')
-#americanData = read.csv(file = 'Raw Dataset_Airline Reviews_Group 2.csv', stringsAsFactors = F)
-
-
-
 # Set working directory
-# **NOTE: Working directory in code below will need to be updated to local directory**
-#setwd('~/Documents/COLUMBIA/Frameworks 2/Proj Proposal')
-
 # Import raw dataset
 americanData = read.csv(file = 'Raw Dataset_Airline Reviews_Group 2.csv', stringsAsFactors = F)
 
@@ -45,20 +40,20 @@ glimpse(americanData)
 str(americanData)
 
 
-# STEP 1: CLEAN DATA & ADD VARIABLES -------------------------------------------
+# STEP 1: CLEAN DATA & CREATION OF NEW VARIABLES -------------------------------
 
-# Add tripVerification variable 
-# Indicates whether a review is verified, not verified, or not listed
+# Add "tripVerification" variable 
+# Indicates whether a review is verified, not verified, or not listed (3 levels)
 americanData$tripVerification = 
   ifelse(grepl('Not Verified', americanData$customer_review, fixed = TRUE),'Not Verified',
          ifelse(grepl('Unverified', americanData$customer_review, fixed = TRUE),'Not Verified',
                 ifelse(grepl('Verified', americanData$customer_review, fixed = TRUE),'Verified','Not Listed')))
 
 str(americanData)
-americanData$customer_review[1]
+americanData$customer_review[1] #view review 1
 
-# Add review variable
-# Cleaned version of customer_review column '
+# Add "review" variable
+# Cleaned version of customer_review column
 americanData$review = 
   ifelse(grepl(' | ', americanData$customer_review, fixed = TRUE),
          substring(gsub(".*erified","",americanData$customer_review),4),
@@ -67,7 +62,7 @@ americanData$review =
 str(americanData)
 americanData$review[1]
 
-# Add flightInterruption variable 
+# Add "flightInterruption" variable 
 # Flags any mention of flight delays or cancellations
 americanData$flightInterruption = 
   ifelse(grepl('delay', tolower(americanData$customer_review), fixed = TRUE), 'Delayed',
@@ -78,25 +73,26 @@ americanData$flightInterruption =
                                      "No Delay/Cancellation")))))
 
 str(americanData)
+unique(americanData$flightInterruption)
 
-# Add reviewLength variable 
+# Add "reviewLength" variable 
 # Count of characters in each passenger review 
 americanData$reviewLength = nchar(americanData$customer_review)
 str(americanData)
 
-# Clean date_flown column: 1) Fix "-" in any May dates  2) Remove the days 
+# Clean date_flown column: (1) Fix "-" in any dates  (2) Remove the day 
 americanData$dateFlight = str_replace(str_replace(americanData$date_flown, "May-", "May "), "20", "") 
 
 americanData$dateReview = str_replace(sub(".*? ", "", americanData$review_date), "20", "") 
 
-# Add reviewSameMonth variable 
+# Add "reviewSameMonth" variable 
 # Indicates whether review was completed in the same month as the date of the trip
 americanData$reviewSameMonth = ifelse(americanData$dateFlight == americanData$dateReview, 'Yes', 'No')
 americanData$dateFlight
 
 str(americanData)
 
-# Add flightType variable 
+# Add "flightType" variable 
 # Binary flag for Direct Flight vs. With Layover
 americanData$flightType = ifelse(grepl(' via ', tolower(americanData$route), fixed = TRUE), 'With Layover','Direct')
 
@@ -140,7 +136,7 @@ AAdata$recommender <- factor(AAdata$recommender)
 
 levels(AAdata$recommender)
 
-sum(is.na(AAdata$recommender))
+sum(is.na(AAdata$recommender)) #91 NAs
 
 str(AAdata)
 
@@ -150,6 +146,7 @@ AAdata <- AAdata %>%
 
 
 # STEP 3: IMPUTATION -----------------------------------------------------------
+# Checking NAs
 table(is.na(americanData$overall))
 table(is.na(americanData$seat_comfort))
 table(is.na(americanData$cabin_service))
@@ -169,71 +166,114 @@ sum(is.na(AAdata_factors))
 AAdata_rest <- AAdata %>%
   select(overall,seat_comfort,cabin_service,food_bev,entertainment,ground_service,value_for_money,reviewLength)
 
+# impute numerical variables through prediction 
 set.seed(617)
 AAdata_rest <- predict(preProcess(AAdata_rest, method = 'bagImpute'), newdata = AAdata_rest)
 
+# verify that there are no NAs 
 sum(is.na(AAdata_rest))
 
+# Join all variable and review into one dataset after imputation 
 AAdata_review <- AAdata %>%
   select(review)
 
 AAdata2 <- bind_cols(AAdata_rest,AAdata_factors,AAdata_review)
 
+# Verify the join and proper imputation 
 str(AAdata2)
 sum(is.na(AAdata2))
 
 
 # STEP 4: FACTOR ANALYSIS ------------------------------------------------------
 
+# Correlation matrix of between all passenger rating categories
 cor(AAdata2[,2:7])
-
 AAdatafa <- AAdata2[,2:7]
 
+# Heatmap Correlation Plot
 ggcorrplot(cor(AAdatafa),colors = c('red','white','green'),type = 'lower')
 
+# Bartlett’s Test of Sphericity
+# To see if there are at least some non-zero correlations 
 cortest.bartlett(cor(AAdatafa), n=100)
+
+# KMO Measure of Sampling Adequacy (MSA)
+# If MSA > 0.5, data is suitable for factor analysis
 KMO(r = cor(AAdatafa))
 
-scree(cor(AAdatafa),factors = T, pc=T)
+# RESULT
+# They all are, so we move to forward with with factor analysis
 
+
+# NUMBER OF FACTORS
+
+# Scree Plot
+scree(cor(AAdatafa),factors = T, pc=T)  
+# RESULT: Suggests 1
+
+# Eigen Value 
+# All factors with eigen value > 1 are selected
 data.frame(factor = 1:ncol(AAdatafa), eigen = eigen(cor(AAdatafa))$values)
+# RESULT: Suggests 1
 
-faresult <- fa(r = AAdatafa,nfactors = 2,fm = 'pa',rotate = 'varimax')
+# Parallel Analysis
+# Select factors with eigen values in the original data > simulated data
+fa.parallel(AAdatafa,fa='fa',fm = 'pa')
+# RESULT: Suggests 2
 
+# Total Variance Explained
+# Using 2 factors 
+# the total variance explained by factors should be greater than 70%
+faresult <- fa(r = AAdatafa,nfactors = 2,fm = 'pa',rotate = 'none')
 faresult$Vaccounted
 
+# Extracted Commonalities
+# Ideally, commonality of each variable must be greater than 0.7, 
+# but a commonality greater than 0.5 may be seen as acceptable.
 data.frame(communality = faresult$communality)
 
-print(faresult$loadings, cut=0.5)
+# Mapping Variables to Factors
+print(faresult$loadings, cut=0)
+# RESULT: pattern of loading does not show a clear preference of a variable for a factor
 
-faresult2 <- fa(r = AAdatafa,nfactors = 2,fm = 'pa',rotate = 'oblimin')
-
+# THEREFORE: Let's rotate the axes
+# Orthogonal rotation using varimax
+faresult2 <- fa(r = AAdatafa,nfactors = 2,fm = 'pa',rotate = 'varimax')
 faresult2$Vaccounted
-
 data.frame(communality = faresult2$communality)
-
 print(faresult2$loadings, cut=0.5)
 
+# Oblique rotation using oblimin
+faresult3 <- fa(r = AAdatafa,nfactors = 2,fm = 'pa',rotate = 'oblimin')
+faresult3$Vaccounted
+data.frame(communality = faresult3$communality)
+print(faresult3$loadings, cut=0.5, sort = T)
+
+# INTERPRETATION 
 fa.diagram(faresult,sort = T)
-fa.diagram(faresult2,sort = T)
+fa.diagram(faresult2,sort = T) #varimax
+fa.diagram(faresult3,sort = T)
 
-factor1scores = faresult$scores[,'PA1']
-factor2scores = faresult$scores[,'PA2']
+# Representing The Factor 
+factor1scores = faresult2$scores[,'PA1']
+factor2scores = faresult2$scores[,'PA2']
 
-fadataframe <- as.data.frame(faresult$scores)
+# FA Dataframe for further analysis 
+# Weighted average of variables reflecting the factor using varimax
+fadataframe <- as.data.frame(faresult2$scores)
 
 AAdatafinal <- bind_cols(AAdata2,fadataframe)
 
 str(AAdatafinal)
 
-
-# PA1: food_bev, cabin_service, seat_comfort, entertainment 
-# PA2: value_for_money, ground_service 
+# RESULT
+# PA1: food_bev, cabin_service, seat_comfort, entertainment (In-flight Service)
+# PA2: value_for_money, ground_service (Not In-flight Service)
 
 
 # STEP 5: NATURAL LANGUGAGE PROCESSING -----------------------------------------
-#options(scipen = 999)
-#DATA 
+# options(scipen = 999)
+# DATA 
 AAdatafinal_reviews <- AAdatafinal %>%
   select(overall,review)
 
@@ -245,16 +285,12 @@ AAdatafinal_reviews$overall = as.integer(AAdatafinal_reviews$overall)
 
 str(AAdatafinal_reviews)
 
-#EXPLORING
-median(AAdatafinal_reviews$overall) # median review rating
+# EXPLORING
+# Average and median of overall ratings
+median(AAdatafinal_reviews$overall) # median overall rating
+mean(AAdatafinal_reviews$overall) # mean overall rating
 
-mean(AAdatafinal_reviews$overall) # mean review rating
-
-#Average and meadian of overall ratings
-AAdatafinal_reviews%>%
-  summarize(average_rating = mean(overall), median_rating = median(overall))
-
-#Distribution of Reviews
+# Distribution of Reviews Graph
 ggplot(data=AAdatafinal_reviews,aes(x=overall))+
   geom_bar(fill='steelblue', alpha=8/10)+
   theme(text = element_text(family = "Helvetica Neue",color = "black"))+
@@ -273,15 +309,15 @@ AAdatafinal_reviews%>%
   mutate(proportion = n/sum(n))
 # In the graph (above) we can see that most of the overall reviews were 1
 
+# Stop words
 tidytext::stop_words
-library(janeaustenr)
-library(tm)
 
+# Common words
 word <- c("airline","flight","american","airlines", "aa", "get","one","2")
 df_common_words = data.frame(word)
 df_common_words
 
-#Common words in all reviews without stop-words 
+# Common words in all reviews without stop-words 
 AAdatafinal_reviews%>%
   unnest_tokens(input = review, output = word)%>%
   select(word)%>%
@@ -289,7 +325,7 @@ AAdatafinal_reviews%>%
   group_by(word)%>%
   anti_join(df_common_words)%>%
   group_by(word)%>%
-  summarize(count = n())%>%
+  dplyr::summarize(count = n())%>%
   ungroup()%>%
   arrange(desc(count))%>%
   top_n(20)%>%
@@ -301,28 +337,27 @@ AAdatafinal_reviews%>%
   ggtitle("Common Words in all Reviews")+
   coord_flip()
 
-#Screaming Reviews
-#capital letters 
+# Reviews
+# capital letters 
 percentUpper = 100*str_count(AAdatafinal_reviews$review,pattern='[A-Z]')/nchar(AAdatafinal_reviews$review)
 summary(percentUpper)
 
-#Exclamation marks
+# Exclamation marks
 percentExclamation = 100*str_count(AAdatafinal_reviews$review,pattern='!')/nchar(AAdatafinal_reviews$review)
 summary(percentExclamation)
 
-#Relationship with exclamation marks and uppercase letters
+# Relationship with exclamation marks and uppercase letters
 r_upper = cor.test(percentUpper,AAdatafinal_reviews$overall)
 r_exclamation = cor.test(percentExclamation,AAdatafinal_reviews$overall)
 correlations2 = data.frame(r = c(r_upper$estimate, r_exclamation$estimate),p_value=c(r_upper$p.value, r_exclamation$p.value))
 rownames(correlations2) = c('Upper Case','Exclamation Marks')
-correlations2 #Upper case shows moderate positive correlation, good p-value
-
+correlations2 #Upper case shows moderate positive correlation, according to p-value
 
 # Categorize
 # Binary Sentiment Lexicons
 as.data.frame(get_sentiments('bing'))
 
-#no stopwords
+# After removing stopwords & Common Terms 
 AAdatafinal_reviews%>%
   group_by(ID)%>%
   unnest_tokens(output = word, input = review)%>%
@@ -333,7 +368,7 @@ AAdatafinal_reviews%>%
   group_by(word)%>%
   inner_join(get_sentiments('bing'))%>%
   group_by(sentiment)%>%
-  count()%>%
+  count()%>% #get count by running up to here
   ggplot(aes(x=sentiment,y=n,fill=sentiment,legend()))+ #graph 
   ylab("Number of Words")+
   xlab(element_blank())+
@@ -352,9 +387,8 @@ AAdatafinal_reviews%>%
 # pos.:6884
 
 
-#words that contribute to positive and negative sentiment in the text
+# After Stemming
 library(SnowballC)
-
 AAdatafinal_reviews%>%
   group_by(ID)%>%
   unnest_tokens(output = word, input = review)%>%
@@ -366,7 +400,7 @@ AAdatafinal_reviews%>%
   select(word)%>%
   inner_join(get_sentiments("bing")) %>%
   mutate(word = wordStem(word)) %>% #stemming
-  count(word, sentiment, sort = TRUE) %>%
+  count(word, sentiment) %>%
   ungroup()%>%
   group_by(sentiment) %>%
   slice_max(n, n = 15) %>% 
@@ -444,6 +478,7 @@ AAdatafinal_reviews%>%
             proportion_negative = negative_words/(negative_words+positive_words))%>%
   ungroup()
 
+# Correlation
 #Let us see if reviews with a lot of positive words are rated favorably.
 AAdatafinal_reviews%>%
   group_by(ID, overall)%>% 
@@ -456,7 +491,7 @@ AAdatafinal_reviews%>%
   ungroup()%>%
   summarize(correlation = cor(proportion_positive,overall))
 
-
+# Correlation
 #Let us see if reviews with a lot of negative words are rated less favorably.
 AAdatafinal_reviews%>%
   group_by(ID, overall)%>% 
@@ -501,8 +536,7 @@ AAdatafinal_reviews%>%
   theme(plot.background = element_blank())+
   theme(panel.background = element_blank())+
   theme(panel.grid.major.x = element_line(color = "grey"))
-
-#This graphs shows more positive, contradictory to other lexicons
+# This graphs shows more positive, contradictory to other lexicons
 # So let's compare emotions with ratings
 
 #Emotions and Rating
@@ -533,8 +567,9 @@ AAdatafinal_reviews%>%
   theme(panel.background = element_blank())+
   theme(panel.grid.major.x = element_line(color = "grey"))
 
-#Quantifying the relationship by examining the correlation 
-#between frequency of emotions expressed and rating
+# Correlartion
+# Quantifying the relationship by examining the correlation 
+# between frequency of emotions expressed and rating
 AAdatafinal_reviews%>%
   group_by(ID,overall)%>%
   unnest_tokens(output = word, input = review)%>%
@@ -548,10 +583,10 @@ AAdatafinal_reviews%>%
   pivot_longer(cols = 3:12, names_to = 'sentiment',values_to = 'n')%>%
   group_by(sentiment)%>%
   summarize(r = cor(n,overall))
-#Conclusion: Correlation between detected emotions and ratings not significant
-#except for joy
+# Conclusion: Correlation between detected emotions and ratings not significant
+# except for joy
 
-############AFINN######
+# AFINN
 # Let's use one more lexicon to confirm 
 # Method 2: Get Lexicon from github
 afinn = read.table('https://raw.githubusercontent.com/pseudorational/data/master/AFINN-111.txt',
@@ -593,6 +628,7 @@ AAdatafinal_reviews %>%
   count()
 
 # Quantified
+# Conclusion: shows that the average is slightly more negative 
 AAdatafinal_reviews %>%
   select(ID,review)%>%
   group_by(ID)%>%
@@ -609,39 +645,47 @@ AAdatafinal_reviews %>%
             mean=mean(reviewSentiment))
 
 
-# Conclusion: shows that the average is slightly more negative 
+# Step 6: Cluster Analysis -----------------------------------------------------
 
-# Step 6: Cluster Analysis *****************************************
+# PA1: food_bev, cabin_service, seat_comfort, entertainment (In-flight Services)
+# PA2: value_for_money, ground_service (Ground Services)
 
 str(AAdatafinal)
 str(AAdata_review)
 table(is.na(AAdatafinal))
 
+# Purpose: Profiling clusters by needs-based variables will help us understand 
+# how the four market segments differ in their needs which in turn 
+# will aid the firm in offering products and services to match the unique needs of the segment.
+# Profiling clusters on demographics or observable variables will help identify customers and target them with the right offer.
 
-#Purpose: Profiling clusters by needs-based variables will help us understand how the four market segments differ in their needs which in turn will aid the firm in offering products and services to match the unique needs of the segment.
-#Profiling clusters on demographics or observable variables will help identify customers and target them with the right offer.
 
+# Hierarchical Cluster Analysis
 
-#Hierarchical Clustering
-
+# Selecting previously standardized variables
+# Factor loadings from the factor analysis solution.
 AAClusterAnalysis = AAdatafinal %>%
   select(PA1, PA2)
 AAClusterAnalysis
 
-
+# Define Similarity Measure
+# Euclidean distance to assess similarity
 d_h = dist(x=AAClusterAnalysis, method='euclidean')
+#Clustering Method
 clusters1 = hclust(d=d_h, method='ward.D2')
 
+# Intepret Results
+# Examine Dendrogram
 plot(clusters1)
 
-
+# Goodness of fit
 cor(cophenetic(clusters1),d_h)
 
-plot(cut(as.dendrogram(clusters1),h=10)$upper)
+# Number of clusters
+plot(cut(as.dendrogram(clusters1),h=12)$upper, main= "Cluster Dendrogram")
 rect.hclust(tree=clusters1,k = 2,border='tomato')
 rect.hclust(tree=clusters1,k = 3,border='tomato')
 rect.hclust(tree=clusters1,k = 4,border='tomato')
-
 
 
 h_segments = cutree(tree=clusters1, k=3)
@@ -649,22 +693,31 @@ h_segments_alt = cutree(tree=clusters1, k=4)
 table(h_segments)
 table(h_segments_alt)
 
+# AAdatafa
+# Visualize hierarchical clustering in 2 dimensions using factor analysis
+# h_segments
+temp = data.frame(Cluster = factor(h_segments),
+                  Factor_1 = fa(AAClusterAnalysis,nfactors = 2,rotate = 'varimax')$scores[,1],
+                  Factor_2 = fa(AAClusterAnalysis,nfactors = 2,rotate = 'varimax')$scores[,2])
+ggplot(temp,aes(x=Factor_1,y=Factor_2,col=Cluster))+
+  labs(y="Factor 1")+
+  scale_x_continuous(name = "Factor 2")+
+  geom_point(alpha=8/10)+
+  theme(text = element_text(family = "Helvetica Neue",color = "black"))+
+  theme(plot.background = element_blank())+
+  theme(panel.background = element_blank())+
+  theme(panel.grid.major = element_line(color = "grey"))+
+  theme(legend.position = "bottom")+
+  ggtitle("Hierarchical Cluster Plot", subtitle = "Factor analysis with varimax rotation" )
 
-temp = data.frame(cluster = factor(h_segments),
-                  factor1 = fa(AAClusterAnalysis,nfactors = 2,rotate = 'varimax')$scores[,1],
-                  factor2 = fa(AAClusterAnalysis,nfactors = 2,rotate = 'varimax')$scores[,2])
-ggplot(temp,aes(x=factor1,y=factor2,col=cluster))+
-  geom_point()
-
-
-#K-means Clustering
-
+# K-means Clustering
 set.seed(617)
 km = kmeans(x = AAClusterAnalysis,centers = 3,iter.max=10000,nstart=25)
 
 table(km$cluster)
 
-
+## Number of Clusters
+# Total within sum of squares Plot
 within_ss = sapply(1:10,FUN = function(x){
   set.seed(617)
   kmeans(x = AAClusterAnalysis,centers = x,iter.max = 1000,nstart = 25)$tot.withinss})
@@ -681,7 +734,7 @@ ggplot(data=data.frame(cluster = 1:10,within_ss),aes(x=cluster,y=within_ss))+
   ggtitle("Total Within Sum of Squares Plot")+
   scale_x_continuous(breaks=seq(1,10,1))
 
-
+# Ratio Plot
 ratio_ss = sapply(1:10,FUN = function(x) {
   set.seed(617)
   km = kmeans(x = AAClusterAnalysis,centers = x,iter.max = 1000,nstart = 25)
@@ -698,7 +751,8 @@ ggplot(data=data.frame(cluster = 1:10,ratio_ss),aes(x=cluster,y=ratio_ss))+
   ggtitle("The Ratio Between The Sum of Squares")+
   scale_x_continuous(breaks=seq(1,10,1))
 
-
+# Silhouette Plot
+library(cluster)
 silhoette_width = sapply(2:10,
                          FUN = function(x) pam(x = AAClusterAnalysis,k = x)$silinfo$avg.width)
 ggplot(data=data.frame(cluster = 2:10,silhoette_width),aes(x=cluster,y=silhoette_width))+
@@ -713,16 +767,15 @@ ggplot(data=data.frame(cluster = 2:10,silhoette_width),aes(x=cluster,y=silhoette
   ggtitle("Silhouette Analysis")+
   scale_x_continuous(breaks=seq(2,10,1))
 
-
-
+# Visualize clustering in 2 dimensions using factor analysis
+# k_segments 
 k_segments = km$cluster
 table(k_segments)
 
-
 temp2 = data.frame(cluster = factor(k_segments),
-                   factor1 = fa(AAClusterAnalysis,nfactors = 2,rotate = 'varimax')$scores[,1],
-                   factor2 = fa(AAClusterAnalysis,nfactors = 2,rotate = 'varimax')$scores[,2])
-ggplot(temp,aes(x=factor1,y=factor2,col=cluster))+
+                   factor_1 = fa(AAClusterAnalysis,nfactors = 2,rotate = 'varimax')$scores[,1],
+                   factor_2 = fa(AAClusterAnalysis,nfactors = 2,rotate = 'varimax')$scores[,2])
+ggplot(temp2,aes(x=factor_1,y=factor_2,col=cluster))+
   labs(y="Factor 2",x="Factor 1")+
   theme(text = element_text(family = "Helvetica Neue",color = "black"))+
   theme(plot.background = element_blank())+
@@ -742,10 +795,10 @@ summary(clusters_mclust2)
 clusters_mclust3 = Mclust(AAClusterAnalysis,G=4)
 summary(clusters_mclust3)
 
-
+# Plot of bic (Bayesian Information Criterion)
+# We are looking for the lowest bic in the line graph
 mclust_bic = sapply(1:10,FUN = function(x) -Mclust(AAClusterAnalysis,G=x)$bic)
 mclust_bic
-
 
 ggplot(data=data.frame(cluster = 1:10,bic = mclust_bic),aes(x=cluster,y=bic))+
   geom_line(col='steelblue',size=1.2)+
@@ -754,19 +807,18 @@ ggplot(data=data.frame(cluster = 1:10,bic = mclust_bic),aes(x=cluster,y=bic))+
 
 
 
-#Let's go with either hierarchical clustering or k-means clustering as it's unrealistic to have 9 different clusters although it's associated with the best BIC
-
-
-
-#Merging clusters back to the main dataset
+# Let's go with either hierarchical clustering or k-means clustering 
+# as it's unrealistic to have 9 different clusters although it's associated with the best BIC
+# Merging clusters back to the main dataset
 
 AAdatafinalclusters = cbind(AAdatafinal, h_segments, k_segments)
 
 str(AAdatafinalclusters)
 
 
-#Cluster Profiling and Key Characteristics
-
+# Cluster Profiling and Key Characteristics
+# Profile Segments by Needs
+# h_segments 
 AAdatafinalclusters %>%
   select(overall:value_for_money,recommender,PA1,PA2,h_segments)%>%
   group_by(h_segments)%>%
@@ -782,27 +834,32 @@ AAdatafinalclusters %>%
   ggtitle("Cluster Profiling and Key Characteristics")+
   coord_flip()
 
-
-
+# k_segments ****
 AAdatafinalclusters %>%
-  select(overall:value_for_money,recommender,PA1,PA2,k_segments)%>%
+  select(overall:value_for_money,k_segments)%>%
   group_by(k_segments)%>%
   summarize_all(function(x) round(mean(x,na.rm=T),2))%>%
-  gather(key = var,value = value,overall:value_for_money,recommender,PA1,PA2)%>%
+  gather(key = var,value = value,overall:value_for_money)%>%
   ggplot(aes(x=var,y=value,fill=factor(k_segments)))+
-  geom_col(position='dodge')+
-  labs(y="Value",x="Variables")+
+  geom_col(position='dodge',alpha=8/10)+
+  labs(y="Rating Average",x="Variables")+
   theme(text = element_text(family = "Helvetica Neue",color = "black"))+
   theme(plot.background = element_blank())+
   theme(panel.background = element_blank())+
   theme(panel.grid.major = element_line(color = "grey"))+
-  ggtitle("Profiling K-means Segments by Needs")+
+  scale_fill_manual(values = c("orange2","olivedrab","plum3"),name = "Segments")+
+  theme(legend.position = "bottom")+
+  ggtitle("Profile by Needs", subtitle = "K-Means segments" )+
   coord_flip()
 
 
-prop.table(table(AAdatafinalclusters$h_segments,AAdatafinalclusters[,9]),1)
+# Profile Segments by characteristics
 
+# Proportions by clusters
+# Reason for travel 
+round(prop.table(table(AAdatafinalclusters$h_segments,AAdatafinalclusters[,9]),1), digits = 2)
 
+# h_segments
 lapply(9:15,function(x) {
   dat = round(prop.table(table(AAdatafinalclusters$h_segments,AAdatafinalclusters[,x]),1),2)*100
   dat = data.frame(dat)
@@ -814,8 +871,7 @@ lapply(9:15,function(x) {
     scale_fill_gradientn(colors=brewer.pal(n=9,name = 'Blues'))
 })
 
-
-
+# k_segments **
 lapply(9:15,function(x) {
   dat = round(prop.table(table(AAdatafinalclusters$k_segments,AAdatafinalclusters[,x]),1),2)*100
   dat = data.frame(dat)
@@ -828,16 +884,13 @@ lapply(9:15,function(x) {
 })
 
 
-#k_segments does a better job than h_segments in distinguishing market segments, we'll move forward with clusters from k-means clustering
+# k_segments does a better job than h_segments in distinguishing market segments, 
+# we'll move forward with clusters from k-means clustering
 
 
+# Step 7: Text Mining and Sentiment Analysis by Clusters -----------------------
 
-
-
-# Step 7: Text and Sentiment Analysis based on each cluster and Comparison*******************************************************************
-
-
-#Sentiment Analysis by Clusters
+# Sentiment Analysis by Clusters - k_segments **
 AAdatafinalclusters%>%
   unnest_tokens(output = word, input = review)%>%
   select(k_segments, word)%>%
@@ -861,11 +914,10 @@ AAdatafinalclusters%>%
   ggtitle("Sentiment of Reviews by Clusters", subtitle = "Valence" )+
   facet_wrap(~k_segments)
 
-
 nrc = read.csv(file = 'nrc.csv', stringsAsFactors = F)
-
 str(nrc)
 
+# Emotions by Cluster - k_segments
 AAdatafinalclusters%>%
   unnest_tokens(output = word, input = review)%>%
   select(k_segments,word)%>%
@@ -891,10 +943,14 @@ AAdatafinalclusters%>%
   coord_flip()
 
 
-#Cluster 2 represents the most dissatisfied customers while cluster 1 represents the most satisfied customers
+# Cluster 1
+# Represents the most dissatisfied customers while 
+# cluster 3 represents the most satisfied customers
 
-
-#Text Mining by Clusters
+# Text Mining by Clusters
+# Segment 1 Common Words - Most Dissatisfied 
+# The least likely to travel in first or business class
+# which may be one of the drivers to their poor in-flight experience
 AA3_1 = AAdatafinalclusters %>%
   filter(k_segments==1) %>%
   unnest_tokens(input = review, output = word) %>%
@@ -908,7 +964,6 @@ AA3_1 = AAdatafinalclusters %>%
 AA3_1 = AA3_1 %>%
   group_by(word) %>%
   mutate(proportion=n/sum(AA3_1$n))
-
 view(AA3_1)
 
 AA3_1 %>%
@@ -916,15 +971,20 @@ AA3_1 %>%
   arrange(desc(proportion)) %>%
   top_n(10)%>%
   ggplot(aes(x=reorder(word,proportion), y=proportion, fill=sentiment))+
-  geom_col()+
+  geom_col(alpha=8/10)+
   theme_light()+
   xlab('Word')+
   ylab('Word Proportion')+
+  theme(text = element_text(family = "Helvetica Neue",color = "black"))+
+  theme(plot.background = element_blank())+
+  theme(panel.background = element_blank())+
+  theme(panel.grid.major = element_line(color = "grey"))+
+  scale_fill_manual(values = c("red2","steelblue"),name = "Sentiment", labels = c("Positive","Negative"))+
+  theme(legend.position = "bottom")+
   ggtitle("Common Words in Segment 1 by Sentiment")+
   coord_flip()
 
-
-
+# Segment 2 Common Words 
 AA3_2 = AAdatafinalclusters %>%
   filter(k_segments==2) %>%
   unnest_tokens(input = review, output = word) %>%
@@ -938,7 +998,6 @@ AA3_2 = AAdatafinalclusters %>%
 AA3_2 = AA3_2 %>%
   group_by(word) %>%
   mutate(proportion=n/sum(AA3_2$n))
-
 view(AA3_2)
 
 AA3_2 %>%
@@ -953,9 +1012,9 @@ AA3_2 %>%
   ggtitle("Common Words in Segment 2 by Sentiment")+
   coord_flip()
 
-
-
-
+# Segment 3 Common Words - Most Satisfied 
+# higher percentage of business or first class passengers
+# also least likely to have experienced a flight delay/cancellation or layover.  
 AA3_3 = AAdatafinalclusters %>%
   filter(k_segments==3) %>%
   unnest_tokens(input = review, output = word) %>%
@@ -969,7 +1028,6 @@ AA3_3 = AAdatafinalclusters %>%
 AA3_3 = AA3_3 %>%
   group_by(word) %>%
   mutate(proportion=n/sum(AA3_3$n))
-
 view(AA3_3)
 
 AA3_3 %>%
@@ -977,9 +1035,15 @@ AA3_3 %>%
   arrange(desc(proportion)) %>%
   top_n(10)%>%
   ggplot(aes(x=reorder(word,proportion), y=proportion, fill=sentiment))+
-  geom_col()+
+  geom_col(alpha=8/10)+
   theme_light()+
   xlab('Word')+
   ylab('Word Proportion')+
+  theme(text = element_text(family = "Helvetica Neue",color = "black"))+
+  theme(plot.background = element_blank())+
+  theme(panel.background = element_blank())+
+  theme(panel.grid.major = element_line(color = "grey"))+
+  scale_fill_manual(values = c("red2","steelblue"),name = "Sentiment", labels = c("Positive","Negative"))+
+  theme(legend.position = "bottom")+
   ggtitle("Common Words in Segment 3 by Sentiment")+
   coord_flip()
