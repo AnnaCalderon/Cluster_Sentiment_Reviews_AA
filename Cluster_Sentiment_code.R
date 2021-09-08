@@ -414,7 +414,7 @@ AAdatafinal_reviews%>%
   labs(x = "Contribution to sentiment",
        y = NULL)
 
-#Proportion of positive (and negative words) for each rating
+#Proportion of positive (and negative words) for each rating **
 #All words
 AAdatafinal_reviews%>%
   group_by(overall)%>% #changed
