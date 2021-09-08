@@ -1,3 +1,4 @@
+![Profile by needs - factors](https://user-images.githubusercontent.com/52983514/132473209-7414629e-5f20-482d-a928-a73e89489347.png)
 # Cluster and Sentiment Analyses on Customer Reviews
 - Extracted customer sentiment from reviews using text mining
 - Applied cluster analysis to categorize every service rated by customers
@@ -38,9 +39,9 @@
 
 ## Clusters Profiling
 ### Profile Segments by Needs
-![image](https://user-images.githubusercontent.com/52983514/132471342-92020e74-4d1f-4103-807c-ec5c11dbcb2c.png)
-![image](https://user-images.githubusercontent.com/52983514/132471525-ba8f57cc-57fd-484e-8287-a5f89093947e.png)
+![Profile by needs - factors](https://user-images.githubusercontent.com/52983514/132473792-0e6c50ac-2201-4b33-ad98-8e31a29da487.png)
 
+<img width="200" alt="Profile - K-means" src="https://user-images.githubusercontent.com/52983514/132473732-decb783a-0df9-4a24-8585-e979c2d605c8.png">
 ### Profile Segments by Characteristics
 <img width="200" alt="Profiling on Observable Variables" src="https://user-images.githubusercontent.com/52983514/132465349-eafe3f58-dd79-43e7-a43f-015ff70731c9.png">
 
