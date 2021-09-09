@@ -30,7 +30,7 @@
 <img width="600" alt="Proportion of Sentiment by Rating" src="https://user-images.githubusercontent.com/52983514/132456477-fcd24d39-6cc1-4d0c-b916-8949a494b583.png">
 
 ## Dimension Reduction with Factor Analysis
-- Through factor analysis, we found that using two components would explain 74% of the six rating categories 
+- Through factor analysis, we found that using two components would explain 74% of the six rated categories 
 <img width="700" alt="Factor Analysis" src="https://user-images.githubusercontent.com/52983514/132464590-9d9e575f-9201-4fd8-a875-10238c6f966b.png">
 
 ## Cluster Analyses
